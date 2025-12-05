@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BiciCoruña - Monitor en Tiempo Real</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link rel="stylesheet" href="bicicoruna.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚴</text></svg>">
+</head>
+<body>
+    <!-- Header Premium -->
+    <header class="main-header">
+        <div class="header-content">
+            <div class="logo-section">
+                <i class="fas fa-bicycle logo-icon"></i>
+
+                <div>
+                    <h1>BiciCoruña</h1>
+                    <span class="subtitle">Monitor en Tiempo Real</span>
+                </div>
+                                <img width="auto" height="auto" src="https://uie.edu/wp-content/uploads/2025/09/logotipo_completo_positivo_web.svg" class="attachment-full size-full wp-image-21181" alt="">
+
+            </div>
+            
+            <nav class="header-nav">
+                <button class="nav-btn" id="refreshBtn" title="Actualizar datos">
+                    <i class="fas fa-sync-alt"></i>
+                    <span>Actualizar</span>
+                </button>
+                <button class="nav-btn" id="themeToggle" title="Cambiar tema">
+                    <i class="fas fa-moon"></i>
+                    <span>Modo Oscuro</span>
+                </button>
+                <button class="nav-btn" id="aboutBtn" title="Información">
+                    <i class="fas fa-info-circle"></i>
+                    <span>Acerca de</span>
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Loading Overlay -->
+    <div id="loading" class="loading-overlay">
+        <div class="loading-content">
+            <i class="fas fa-bicycle fa-3x loading-icon"></i>
+            <p>Cargando estaciones...</p>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="main-container">
+        <!-- Sidebar Izquierdo -->
+        <aside class="sidebar sidebar-left">
+            <!-- Estadísticas Principales -->
+            <div class="panel stats-main-panel">
+                <h3><i class="fas fa-chart-pie"></i> Información General</h3>
+                <div class="stats-grid-compact">
+                    <div class="stat-item">
+                        <div class="stat-icon green">
+                            <i class="fas fa-bicycle"></i>
+                        </div>
+                        <div class="stat-data">
+                            <span class="stat-label">Bicis Normales</span>
+                            <span class="stat-value" id="normalBikes">-</span>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-item">
+                        <div class="stat-icon yellow">
+                            <i class="fas fa-bolt"></i>
+                        </div>
+                        <div class="stat-data">
+                            <span class="stat-label">Bicis Eléctricas</span>
+                            <span class="stat-value" id="electricBikes">-</span>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-item">
+                        <div class="stat-icon blue">
+                            <i class="fas fa-parking"></i>
+                        </div>
+                        <div class="stat-data">
+                            <span class="stat-label">Huecos Libres</span>
+                            <span class="stat-value" id="totalFreeDocks">-</span>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-item">
+                        <div class="stat-icon red">
+                            <i class="fas fa-exclamation-circle"></i>
+                        </div>
+                        <div class="stat-data">
+                            <span class="stat-label">Estaciones Vacías</span>
+                            <span class="stat-value" id="emptyStationsCount">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Buscador de Bicis Cercanas -->
+            <div class="panel search-panel">
+                <h3><i class="fas fa-map-marker-alt"></i> Encontrar Bici Cerca</h3>
+                
+                <button class="btn-primary" id="useMyLocation">
+                    <i class="fas fa-crosshairs"></i>
+                    Usar Mi Ubicación
+                </button>
+                
+                <div class="form-group">
+                    <label>Tipo de bici:</label>
+                    <select id="bikeTypeFilter" class="form-control">
+                        <option value="any">🚲 Cualquiera</option>
+                        <option value="electric">⚡ Solo Eléctricas</option>
+                        <option value="normal">🚴 Solo Normales</option>
+                    </select>
+                </div>
+                
+                <div id="nearbyResults" class="nearby-results"></div>
+            </div>
+
+            <!-- Filtros del Mapa -->
+            <div class="panel filters-panel">
+                <h3><i class="fas fa-filter"></i> Filtros de Mapa</h3>
+                <div class="filter-list">
+                    <label class="filter-checkbox">
+                        <input type="checkbox" id="showHigh" checked>
+                        <span class="checkmark high"></span>
+                        <span class="filter-label">Alta disponibilidad (+75%)</span>
+                    </label>
+                    <label class="filter-checkbox">
+                        <input type="checkbox" id="showMedium" checked>
+                        <span class="checkmark medium"></span>
+                        <span class="filter-label">Media disponibilidad (25-75%)</span>
+                    </label>
+                    <label class="filter-checkbox">
+                        <input type="checkbox" id="showLow" checked>
+                        <span class="checkmark low"></span>
+                        <span class="filter-label">Baja disponibilidad (-25%)</span>
+                    </label>
+                    <label class="filter-checkbox">
+                        <input type="checkbox" id="showInactive" checked>
+                        <span class="checkmark inactive"></span>
+                        <span class="filter-label">Estaciones inactivas</span>
+                    </label>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Mapa Principal -->
+        <main class="map-container">
+            <div id="map" class="map"></div>
+            
+            <!-- Controles Flotantes -->
+            <div class="map-controls">
+                <button class="control-btn" id="centerMap" title="Centrar mapa">
+                    <i class="fas fa-crosshairs"></i>
+                </button>
+                <button class="control-btn" id="fullScreen" title="Pantalla completa">
+                    <i class="fas fa-expand"></i>
+                </button>
+            </div>
+        </main>
+
+        <!-- Sidebar Derecho -->
+        <aside class="sidebar sidebar-right">
+            <!-- Top 5 Estaciones -->
+            <div class="panel top-stations-panel">
+                <h3><i class="fas fa-star"></i> Top 5 - Más Disponibilidad</h3>
+                <div id="topStationsList" class="stations-list"></div>
+            </div>
+
+            <!-- Estadísticas Detalladas -->
+            <div class="panel detailed-stats-panel">
+                <h3><i class="fas fa-chart-bar"></i> Estadísticas Detalladas</h3>
+                <div class="detailed-stats-grid">
+                    <div class="detail-stat">
+                        <span class="detail-label">Total Estaciones</span>
+                        <span class="detail-value" id="activeStations">-</span>
+                    </div>
+                    <div class="detail-stat">
+                        <span class="detail-label">Bicis Disponibles</span>
+                        <span class="detail-value" id="availableBikes">-</span>
+                    </div>
+                    <div class="detail-stat">
+                        <span class="detail-label">Huecos Libres</span>
+                        <span class="detail-value" id="availableDocks">-</span>
+                    </div>
+                    <div class="detail-stat">
+                        <span class="detail-label">Ocupación Media</span>
+                        <span class="detail-value" id="avgOccupancy">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Leyenda -->
+            <div class="panel legend-panel">
+                <h3><i class="fas fa-map"></i> Leyenda</h3>
+                <div class="legend-items">
+                    <div class="legend-item">
+                        <span class="legend-color high"></span>
+                        <span>Alta disponibilidad (+75%)</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color medium"></span>
+                        <span>Media disponibilidad (25-75%)</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color low"></span>
+                        <span>Baja disponibilidad (-25%)</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color inactive"></span>
+                        <span>Estación inactiva</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Footer -->
+    <footer class="main-footer">
+        <div class="footer-content">
+            <p><i class="fas fa-copyright"></i> 2025 UIE - Roi Ferreiroa</p>
+            <p id="lastUpdate" class="last-update">Última actualización: --:--:--</p>
+        </div>
+    </footer>
+
+    <!-- Modal About -->
+    <div id="aboutModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2><i class="fas fa-info-circle"></i> Acerca de BiciCoruña Monitor</h2>
+            <p>Sistema de monitorización en tiempo real del servicio de bicicletas públicas de A Coruña.</p>
+            <h3>Características:</h3>
+            <ul>
+                <li>✅ Datos en tiempo real vía GBFS</li>
+                <li>✅ Geolocalización y búsqueda cercana</li>
+                <li>✅ Estadísticas detalladas</li>
+                <li>✅ Filtros avanzados</li>
+                <li>✅ Modo oscuro/claro</li>
+            </ul>
+
+        </div>
+    </div>
+<!-- Panel Multimodal -->
+<div id="multimodalPanel" class="multimodal-panel">
+    <div class="panel-header">
+        <h3>🚗+🚴 Opción Multimodal</h3>
+        <button onclick="closeMultimodalPanel()" style="background: none; border: none; font-size: 24px; cursor: pointer;">×</button>
+    </div>
+    <div id="multimodalContent">
+        <!-- Contenido dinámico -->
+    </div>
+</div>
+    <!-- Leaflet -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Módulos BiciCoruña Premium v2.0 -->
+    <script src="modules/routing.js"></script>
+    <script src="modules/scoring.js"></script>
+    <script src="bicicoruna.js"></script>
+    <script src="modules/multimodal.js"></script>
+     <script src="modules/destination-picker.js"></script> <!-- NUEVO -->
+
+    <!-- Inicializar cuando todo esté listo -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(() => {
+                if (typeof DestinationPicker !== 'undefined') {
+                    DestinationPicker.init();
+                }
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

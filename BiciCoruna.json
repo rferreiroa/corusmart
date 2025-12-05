@@ -1,0 +1,348 @@
+{
+  "name": "BiciCoruña",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds"
+            }
+          ]
+        }
+      },
+      "id": "6a6c45e2-e634-449f-a3f0-b0ceb30f94fc",
+      "name": "Schedule BiciCoruña Monitor1",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        -992,
+        224
+      ],
+      "notes": "Ejecutar cada minuto para monitoreo automático"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===================================================================\n// CÓDIGO BICICORUÑA CON TIPOS DE VEHÍCULOS\n// ===================================================================\n\nconst items = $input.all();\n\nlet stationInfoArray = null;\nlet stationStatusArray = null;\n\n// Procesar cada item que llega\nfor (let i = 0; i < items.length; i++) {\n  const item = items[i];\n  const data = item.json;\n  \n  let stations = null;\n  \n  if (data.stations) {\n    stations = data.stations;\n  } else if (data.data && data.data.stations) {\n    stations = data.data.stations;\n  }\n  \n  if (stations && stations.length > 0) {\n    const firstStation = stations[0];\n    \n    if (firstStation.name !== undefined && firstStation.address !== undefined) {\n      stationInfoArray = stations;\n    } else if (firstStation.num_bikes_available !== undefined) {\n      stationStatusArray = stations;\n    }\n  }\n}\n\n// Validar que tenemos ambos arrays\nif (!stationInfoArray || !stationStatusArray) {\n  throw new Error('ERROR: No se encontraron ambos arrays de datos');\n}\n\n// Ahora combinar los datos\nconst result = [];\n\nfor (let i = 0; i < stationInfoArray.length; i++) {\n  const info = stationInfoArray[i];\n  \n  const status = stationStatusArray.find(s => s.station_id === info.station_id);\n  \n  // Extraer valores básicos\n  const totalBikes = status ? Number(status.num_bikes_available) : 0;\n  const docks = status ? Number(status.num_docks_available) : 0;\n  const cap = Number(info.capacity) || 0;\n  \n  // ============================================\n  // EXTRAER BICIS ELÉCTRICAS DEL ARRAY vehicle_types_available\n  // ============================================\n  let electricBikes = 0;\n  let normalBikes = 0;\n  \n  if (status && status.vehicle_types_available && Array.isArray(status.vehicle_types_available)) {\n    for (let j = 0; j < status.vehicle_types_available.length; j++) {\n      const vehicleType = status.vehicle_types_available[j];\n      const typeId = vehicleType.vehicle_type_id;\n      const count = Number(vehicleType.count) || 0;\n      \n      // EFIT y BOOST son eléctricas\n      if (typeId === 'EFIT' || typeId === 'BOOST') {\n        electricBikes += count;\n      }\n      // FIT son normales\n      else if (typeId === 'FIT') {\n        normalBikes += count;\n      }\n    }\n  } else {\n    // Fallback: si no hay vehicle_types_available, asumimos todas normales\n    normalBikes = totalBikes;\n  }\n  \n  // Calcular ocupación\n  const occ = cap > 0 ? Math.round((totalBikes / cap) * 100 * 100) / 100 : 0;\n  \n  // Estado\n  let estado = 'available';\n  if (totalBikes === 0) estado = 'empty';\n  else if (docks === 0) estado = 'full';\n  else if (totalBikes <= 2) estado = 'low_bikes';\n  \n  // Crear objeto de estación\n  result.push({\n    station_id: String(info.station_id),\n    name: info.name,\n    address: info.address || '',\n    lat: Number(info.lat),\n    lon: Number(info.lon),\n    capacity: cap,\n    num_bikes_available: totalBikes,\n    num_docks_available: docks,\n    num_ebikes_available: electricBikes,\n    num_normal_bikes: normalBikes,\n    occupancy_rate: occ,\n    availability_status: estado,\n    is_renting: status ? Boolean(status.is_renting) : true,\n    is_returning: status ? Boolean(status.is_returning) : true,\n    is_installed: status ? Boolean(status.is_installed) : true,\n    last_reported: status ? status.last_reported : Math.floor(Date.now() / 1000),\n    \n    // Información adicional de tipos de vehículos\n    vehicle_types: status && status.vehicle_types_available ? status.vehicle_types_available : []\n  });\n}\n\n// Calcular totales\nlet totalBikes = 0;\nlet totalDocks = 0;\nlet totalCap = 0;\nlet totalElectric = 0;\nlet totalNormal = 0;\n\nfor (let i = 0; i < result.length; i++) {\n  totalBikes += result[i].num_bikes_available;\n  totalDocks += result[i].num_docks_available;\n  totalCap += result[i].capacity;\n  totalElectric += result[i].num_ebikes_available;\n  totalNormal += result[i].num_normal_bikes;\n}\n\n// Crear respuesta final\nconst response = {\n  success: true,\n  timestamp: new Date().toISOString(),\n  system: 'BiciCoruña',\n  city: 'A Coruña',\n  operator: 'EMVSA',\n  summary: {\n    total_stations: result.length,\n    total_bikes: totalBikes,\n    total_docks: totalDocks,\n    total_capacity: totalCap,\n    total_electric_bikes: totalElectric,\n    total_normal_bikes: totalNormal,\n    avg_occupancy: totalCap > 0 ? Math.round((totalBikes / totalCap) * 100 * 100) / 100 : 0\n  },\n  stations: result\n};\n\nreturn [{ json: response }];\n"
+      },
+      "id": "7c12ac6b-aaac-47d9-98a8-9440a748b55a",
+      "name": "Procesar y Combinar BiciCoruña",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -96,
+        320
+      ],
+      "notes": "Combina Info + Status y procesa"
+    },
+    {
+      "parameters": {
+        "path": "bicicoruna",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "df36f0b2-995d-456a-8c53-b4739feeb5d1",
+      "name": "GET Estaciones BiciCoruña1",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -992,
+        416
+      ],
+      "webhookId": "bicoruna-get-stations-public",
+      "notes": "Endpoint público para el frontend - Resuelve CORS"
+    },
+    {
+      "parameters": {
+        "url": "https://acoruna.publicbikesystem.net/customer/gbfs/v2/gbfs.json",
+        "options": {}
+      },
+      "id": "7914c46b-e960-4ab2-af37-f0839b8feac5",
+      "name": "Obtener GBFS Discovery BiciCoruña",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        -768,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.data.en.feeds[3].url }}",
+        "options": {}
+      },
+      "id": "6cc22076-6ff5-4531-84e5-74b0efaa9e7a",
+      "name": "Obtener Info Estaciones BiciCoruña",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        -544,
+        224
+      ],
+      "notes": "Información estática: ubicación, nombre, capacidad"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.data.en.feeds[4].url }}",
+        "options": {}
+      },
+      "id": "a483a774-12d6-4944-86b1-8ac2cc633247",
+      "name": "Obtener Estado Estaciones BiciCoruña",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        -544,
+        416
+      ],
+      "notes": "Estado en tiempo real: bicis y huecos disponibles"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "GET, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type"
+              }
+            ]
+          }
+        }
+      },
+      "id": "23e287dd-6c82-419e-8dd5-94c0db94ccf5",
+      "name": "Responder al Frontend1",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        128,
+        320
+      ],
+      "notes": "Devuelve JSON con CORS"
+    },
+    {
+      "parameters": {},
+      "id": "8746c55a-43a2-46da-958e-bffb6567bee0",
+      "name": "Combinar Datos Webhook1",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        -320,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = new Date();\nconst hour = now.getHours();\nconst dayOfWeek = now.getDay();\nconst isWeekend = dayOfWeek === 0 || dayOfWeek === 6;\n\nfunction getOccupancy(parkingId, hour, isWeekend) {\n  let base = 0.5;\n  if (hour >= 8 && hour < 10) {\n    base = parkingId === 'cantones' ? 0.90 : 0.65;\n  } else if (hour >= 10 && hour < 14) {\n    base = 0.75;\n  } else if (hour >= 16 && hour < 20) {\n    base = 0.70;\n  } else if (hour >= 20 && hour < 23) {\n    base = isWeekend ? 0.60 : 0.40;\n  } else {\n    base = 0.20;\n  }\n  const variation = (Math.random() - 0.5) * 0.15;\n  return Math.max(0.1, Math.min(0.95, base + variation));\n}\n\nconst parkingsList = [\n  { id: 'cantones', name: 'Parking Cantones', address: 'Cantones, 15001', lat: 43.3713, lon: -8.3960, capacity: 400, price: 2.07, distance: 0.3, walk: 4 },\n  { id: 'palexco', name: 'Parking Palexco', address: 'Av. Arteixo, 15007', lat: 43.3673, lon: -8.4047, capacity: 450, price: 1.85, distance: 1.2, walk: 15 },\n  { id: 'papagayo', name: 'Parking Papagayo', address: 'Av. Papagayo, 15190', lat: 43.3556, lon: -8.4201, capacity: 500, price: 1.60, distance: 2.5, walk: 30 },\n  { id: 'casa_agua', name: 'Parking Casa del Agua', address: 'Paseo Marítimo, 15002', lat: 43.3645, lon: -8.4028, capacity: 350, price: 1.95, distance: 0.8, walk: 10 },\n  { id: 'opera', name: 'Parking Palacio Ópera', address: 'Glorieta América, 15004', lat: 43.3701, lon: -8.3989, capacity: 280, price: 2.15, distance: 0.5, walk: 6 },\n  { id: 'parrote', name: 'Parking O Parrote', address: 'C/ Parrote, 15001', lat: 43.3689, lon: -8.3945, capacity: 320, price: 2.00, distance: 0.4, walk: 5 },\n  { id: 'maria_pita', name: 'Parking María Pita', address: 'Plaza María Pita, 15001', lat: 43.3715, lon: -8.3975, capacity: 180, price: 2.30, distance: 0.2, walk: 3 }\n];\n\nconst result = parkingsList.map(p => {\n  const occRate = getOccupancy(p.id, hour, isWeekend);\n  const occupied = Math.round(p.capacity * occRate);\n  const free = p.capacity - occupied;\n  \n  let status = 'available';\n  if (free === 0) status = 'full';\n  else if (free < 10) status = 'almost_full';\n  else if (free < 30) status = 'limited';\n  \n  let risk = 'low';\n  if (free < 5) risk = 'high';\n  else if (free < 20) risk = 'medium';\n  \n  return {\n    id: p.id,\n    name: p.name,\n    address: p.address,\n    location: {              // ← ESTRUCTURA CORRECTA\n      lat: p.lat,\n      lon: p.lon\n    },\n    capacity: p.capacity,\n    price_per_hour: p.price,\n    distance_to_center: p.distance,\n    walking_time: p.walk,\n    current_status: {        // ← ESTRUCTURA CORRECTA\n      free_spots: free,\n      occupied_spots: occupied,\n      occupancy_rate: Math.round(occRate * 100),\n      status: status,\n      risk: risk,\n      last_updated: now.toISOString()\n    }\n  };\n});\n\nreturn [{ \n  json: {\n    success: true,\n    timestamp: now.toISOString(),\n    parkings: result\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -304,
+        32
+      ],
+      "id": "08e31925-eb74-457b-a7e0-3ba8f4ee1724",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "path": "parkings",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "67c27a19-ec2a-4ffb-9e0d-2e9a5d51de11",
+      "name": "Parkings",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -896,
+        48
+      ],
+      "webhookId": "bicoruna-get-stations-public",
+      "notes": "Endpoint público para el frontend - Resuelve CORS"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "GET, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type"
+              }
+            ]
+          }
+        }
+      },
+      "id": "cc641409-c5a4-455b-bc0b-46d4b3424993",
+      "name": "Responder al Frontend",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "notes": "Devuelve JSON con CORS"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule BiciCoruña Monitor1": {
+      "main": [
+        [
+          {
+            "node": "Obtener GBFS Discovery BiciCoruña",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Procesar y Combinar BiciCoruña": {
+      "main": [
+        [
+          {
+            "node": "Responder al Frontend1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Estaciones BiciCoruña1": {
+      "main": [
+        [
+          {
+            "node": "Obtener GBFS Discovery BiciCoruña",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener GBFS Discovery BiciCoruña": {
+      "main": [
+        [
+          {
+            "node": "Obtener Info Estaciones BiciCoruña",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Obtener Estado Estaciones BiciCoruña",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Info Estaciones BiciCoruña": {
+      "main": [
+        [
+          {
+            "node": "Combinar Datos Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Estado Estaciones BiciCoruña": {
+      "main": [
+        [
+          {
+            "node": "Combinar Datos Webhook1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Combinar Datos Webhook1": {
+      "main": [
+        [
+          {
+            "node": "Procesar y Combinar BiciCoruña",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Responder al Frontend",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Responder al Frontend1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parkings": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "60f3d540-4426-4f29-bb5d-3b33f7237d6b",
+  "meta": {
+    "instanceId": "b2c8efbc8f243f4abd25170f6850133a58be5d5dddae6e2f9ea84643cc2ab14a"
+  },
+  "id": "fMcvl3ydIz1sNuOH",
+  "tags": []
+}
