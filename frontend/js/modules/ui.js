@@ -52,16 +52,50 @@ const UIManager = {
 
         // Map controls
         document.getElementById('centerMap')?.addEventListener('click', () => {
-            MapManager.centerDefault();
+            if (typeof MapManager !== 'undefined') {
+                MapManager.centerDefault();
+            }
+            this.showNotification('Mapa centrado en A Coruña', 'info');
         });
 
         document.getElementById('fullScreen')?.addEventListener('click', () => {
-            MapManager.toggleFullscreen();
+            if (typeof MapManager !== 'undefined') {
+                MapManager.toggleFullscreen();
+            }
         });
 
         // Mobile menu toggle
         document.getElementById('menuToggle')?.addEventListener('click', () => {
             this.toggleMobileMenu();
+        });
+
+        // Close sidebar button (mobile)
+        document.getElementById('closeSidebar')?.addEventListener('click', () => {
+            this.closeMobileMenu();
+        });
+
+        // Close sidebar when clicking overlay (on mobile, clicking outside sidebar)
+        document.addEventListener('click', (e) => {
+            const sidebar = document.getElementById('sidebar');
+            const menuToggle = document.getElementById('menuToggle');
+
+            if (document.body.classList.contains('menu-open') &&
+                sidebar && !sidebar.contains(e.target) &&
+                menuToggle && !menuToggle.contains(e.target)) {
+                this.closeMobileMenu();
+            }
+        });
+
+        // Handle escape key to close modals and sidebar
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                // Close any open modals
+                document.querySelectorAll('.modal.active').forEach(modal => {
+                    modal.classList.remove('active');
+                });
+                // Close mobile menu
+                this.closeMobileMenu();
+            }
         });
     },
 
@@ -177,9 +211,10 @@ const UIManager = {
     },
 
     /**
-     * Update statistics display
+     * Update statistics display (both sidebar and mobile stats bar)
      */
     updateStats(stats) {
+        // Sidebar stats
         const elements = {
             'normalBikes': stats.total_normal_bikes || '-',
             'electricBikes': stats.total_ebikes || '-',
@@ -192,6 +227,19 @@ const UIManager = {
         };
 
         Object.entries(elements).forEach(([id, value]) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = value;
+        });
+
+        // Mobile stats bar (compact version)
+        const mobileElements = {
+            'statBikes': stats.total_bikes || '-',
+            'statEbikes': stats.total_ebikes || '-',
+            'statDocks': stats.total_docks || '-',
+            'statEmpty': stats.empty_stations || '-'
+        };
+
+        Object.entries(mobileElements).forEach(([id, value]) => {
             const el = document.getElementById(id);
             if (el) el.textContent = value;
         });
@@ -241,10 +289,116 @@ const UIManager = {
     },
 
     /**
-     * Toggle mobile menu
+     * Toggle mobile menu (sidebar)
      */
     toggleMobileMenu() {
-        document.body.classList.toggle('menu-open');
+        const isOpen = document.body.classList.toggle('menu-open');
+        // Prevent body scroll when menu is open
+        document.body.style.overflow = isOpen ? 'hidden' : '';
+    },
+
+    /**
+     * Close mobile menu
+     */
+    closeMobileMenu() {
+        document.body.classList.remove('menu-open');
+        document.body.style.overflow = '';
+    },
+
+    /**
+     * Show station detail modal
+     */
+    showStationDetail(station) {
+        // Create modal if doesn't exist
+        let modal = document.getElementById('stationDetailModal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'stationDetailModal';
+            modal.className = 'modal';
+            modal.innerHTML = `
+                <div class="modal-content station-detail-modal">
+                    <button class="close" aria-label="Cerrar">&times;</button>
+                    <div id="stationDetailContent"></div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            // Close button
+            modal.querySelector('.close').addEventListener('click', () => {
+                this.hideModal('stationDetailModal');
+            });
+        }
+
+        const ebikes = station.num_ebikes_available || 0;
+        const normalBikes = station.num_bikes_available - ebikes;
+        const occupancy = station.capacity > 0
+            ? Math.round((station.num_bikes_available / station.capacity) * 100)
+            : 0;
+
+        // Populate content
+        const content = document.getElementById('stationDetailContent');
+        content.innerHTML = `
+            <h2>${station.name}</h2>
+            ${station.address ? `<p class="station-address">${station.address}</p>` : ''}
+
+            <div class="station-detail-stats">
+                <div class="detail-stat-card">
+                    <div class="detail-stat-icon green">🚲</div>
+                    <div class="detail-stat-value">${normalBikes}</div>
+                    <div class="detail-stat-label">Bicis Normales</div>
+                </div>
+                <div class="detail-stat-card">
+                    <div class="detail-stat-icon yellow">⚡</div>
+                    <div class="detail-stat-value">${ebikes}</div>
+                    <div class="detail-stat-label">Eléctricas</div>
+                </div>
+                <div class="detail-stat-card">
+                    <div class="detail-stat-icon blue">🅿️</div>
+                    <div class="detail-stat-value">${station.num_docks_available}</div>
+                    <div class="detail-stat-label">Huecos Libres</div>
+                </div>
+                <div class="detail-stat-card">
+                    <div class="detail-stat-icon ${occupancy >= 50 ? 'green' : occupancy >= 25 ? 'yellow' : 'red'}">📊</div>
+                    <div class="detail-stat-value">${occupancy}%</div>
+                    <div class="detail-stat-label">Ocupación</div>
+                </div>
+            </div>
+
+            <div class="station-detail-info">
+                <div class="info-row">
+                    <span class="info-label">Capacidad total:</span>
+                    <span class="info-value">${station.capacity} anclajes</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Estado:</span>
+                    <span class="info-value ${station.is_renting ? 'status-ok' : 'status-warning'}">
+                        ${station.is_renting ? '✅ Operativa' : '⚠️ No disponible'}
+                    </span>
+                </div>
+            </div>
+
+            <div class="station-detail-history">
+                <h3>📈 Histórico de disponibilidad</h3>
+                <p class="text-muted">Próximamente: gráficas de disponibilidad por hora/día</p>
+                <div class="history-placeholder">
+                    <div class="history-bar" style="height: 60%"></div>
+                    <div class="history-bar" style="height: 45%"></div>
+                    <div class="history-bar" style="height: 70%"></div>
+                    <div class="history-bar" style="height: 55%"></div>
+                    <div class="history-bar" style="height: 80%"></div>
+                    <div class="history-bar" style="height: 40%"></div>
+                    <div class="history-bar" style="height: 65%"></div>
+                </div>
+            </div>
+
+            <div class="station-detail-actions">
+                <button class="btn-primary" onclick="MapManager.centerOn(${station.lat}, ${station.lon}, 17); UIManager.hideModal('stationDetailModal');">
+                    <i class="fas fa-map-marker-alt"></i> Ver en mapa
+                </button>
+            </div>
+        `;
+
+        this.showModal('stationDetailModal');
     },
 
     /**
