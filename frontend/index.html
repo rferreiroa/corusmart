@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="Monitor en tiempo real del sistema de bicicletas públicas de A Coruña">
+    <meta name="theme-color" content="#0d9488">
+
+    <title>BiciCoruña - Monitor en Tiempo Real</title>
+
+    <!-- Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚴</text></svg>">
+
+    <!-- PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+
+    <!-- External CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- App CSS -->
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <button class="menu-toggle" id="menuToggle" aria-label="Menu">
+                <i class="fas fa-bars"></i>
+            </button>
+
+            <div class="logo">
+                <i class="fas fa-bicycle"></i>
+                <div class="logo-text">
+                    <h1>BiciCoruña</h1>
+                    <span class="subtitle">Monitor en Tiempo Real</span>
+                </div>
+            </div>
+
+            <nav class="header-nav">
+                <button class="nav-btn" id="refreshBtn" title="Actualizar">
+                    <i class="fas fa-sync-alt"></i>
+                    <span class="nav-label">Actualizar</span>
+                </button>
+                <button class="nav-btn" id="themeToggle" title="Cambiar tema">
+                    <i class="fas fa-moon"></i>
+                    <span class="nav-label">Tema</span>
+                </button>
+                <button class="nav-btn" id="aboutBtn" title="Acerca de">
+                    <i class="fas fa-info-circle"></i>
+                    <span class="nav-label">Info</span>
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Loading Overlay -->
+    <div id="loading" class="loading-overlay">
+        <div class="loading-content">
+            <div class="loading-spinner">
+                <i class="fas fa-bicycle fa-spin"></i>
+            </div>
+            <p>Cargando estaciones...</p>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Stats Bar (Mobile) -->
+        <div class="stats-bar">
+            <div class="stat-pill">
+                <i class="fas fa-bicycle"></i>
+                <span id="statBikes">-</span>
+            </div>
+            <div class="stat-pill electric">
+                <i class="fas fa-bolt"></i>
+                <span id="statEbikes">-</span>
+            </div>
+            <div class="stat-pill">
+                <i class="fas fa-parking"></i>
+                <span id="statDocks">-</span>
+            </div>
+            <div class="stat-pill warning">
+                <i class="fas fa-exclamation-triangle"></i>
+                <span id="statEmpty">-</span>
+            </div>
+        </div>
+
+        <!-- Map Container -->
+        <div class="map-wrapper">
+            <div id="map" class="map"></div>
+
+            <!-- Map Controls -->
+            <div class="map-controls">
+                <button class="control-btn" id="centerMap" title="Centrar mapa">
+                    <i class="fas fa-crosshairs"></i>
+                </button>
+                <button class="control-btn" id="fullScreen" title="Pantalla completa">
+                    <i class="fas fa-expand"></i>
+                </button>
+            </div>
+
+            <!-- Location Button (Floating) -->
+            <button class="location-fab" id="useMyLocation" title="Mi ubicación">
+                <i class="fas fa-location-arrow"></i>
+            </button>
+        </div>
+
+        <!-- Sidebar (slides in on mobile) -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h2>Información</h2>
+                <button class="close-sidebar" id="closeSidebar">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <!-- Statistics Panel -->
+            <div class="panel">
+                <h3><i class="fas fa-chart-pie"></i> Estadísticas</h3>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon green">
+                            <i class="fas fa-bicycle"></i>
+                        </div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="normalBikes">-</span>
+                            <span class="stat-label">Bicis Normales</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon yellow">
+                            <i class="fas fa-bolt"></i>
+                        </div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="electricBikes">-</span>
+                            <span class="stat-label">Bicis Eléctricas</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon blue">
+                            <i class="fas fa-parking"></i>
+                        </div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="totalFreeDocks">-</span>
+                            <span class="stat-label">Huecos Libres</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon red">
+                            <i class="fas fa-exclamation-circle"></i>
+                        </div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="emptyStationsCount">-</span>
+                            <span class="stat-label">Estaciones Vacías</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Find Nearby Panel -->
+            <div class="panel">
+                <h3><i class="fas fa-map-marker-alt"></i> Encontrar Bici</h3>
+                <div class="form-group">
+                    <label for="bikeTypeFilter">Tipo de bici:</label>
+                    <select id="bikeTypeFilter" class="form-control">
+                        <option value="any">🚲 Cualquiera</option>
+                        <option value="electric">⚡ Solo Eléctricas</option>
+                        <option value="normal">🚴 Solo Normales</option>
+                    </select>
+                </div>
+                <div id="nearbyResults" class="nearby-results">
+                    <p class="text-muted">Pulsa el botón de ubicación para ver estaciones cercanas</p>
+                </div>
+            </div>
+
+            <!-- Filters Panel -->
+            <div class="panel">
+                <h3><i class="fas fa-filter"></i> Filtros</h3>
+                <div class="filter-list">
+                    <label class="filter-item">
+                        <input type="checkbox" id="showHigh" checked>
+                        <span class="filter-check high"></span>
+                        <span>Alta (+75%)</span>
+                    </label>
+                    <label class="filter-item">
+                        <input type="checkbox" id="showMedium" checked>
+                        <span class="filter-check medium"></span>
+                        <span>Media (25-75%)</span>
+                    </label>
+                    <label class="filter-item">
+                        <input type="checkbox" id="showLow" checked>
+                        <span class="filter-check low"></span>
+                        <span>Baja (-25%)</span>
+                    </label>
+                    <label class="filter-item">
+                        <input type="checkbox" id="showInactive" checked>
+                        <span class="filter-check inactive"></span>
+                        <span>Inactivas</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Top Stations Panel -->
+            <div class="panel">
+                <h3><i class="fas fa-star"></i> Top 5 Estaciones</h3>
+                <div id="topStationsList" class="stations-list">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+
+            <!-- System Selector (for future) -->
+            <div class="panel">
+                <h3><i class="fas fa-globe"></i> Sistema</h3>
+                <div class="system-selector">
+                    <button class="system-btn active" data-system="bicicoruna">
+                        🚲 Bicicoruña
+                    </button>
+                    <button class="system-btn disabled" data-system="bicimad" title="Próximamente">
+                        🚴 BiciMAD
+                    </button>
+                    <button class="system-btn disabled" data-system="renfe" title="Próximamente">
+                        🚆 Renfe
+                    </button>
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p id="lastUpdate">Última actualización: --:--:--</p>
+        <p>© 2025 UIE - Roi Ferreiroa</p>
+    </footer>
+
+    <!-- About Modal -->
+    <div id="aboutModal" class="modal">
+        <div class="modal-content">
+            <button class="close" aria-label="Cerrar">&times;</button>
+            <h2><i class="fas fa-info-circle"></i> Acerca de BiciCoruña</h2>
+            <p>Sistema de monitorización en tiempo real del servicio de bicicletas públicas de A Coruña.</p>
+            <h3>Características:</h3>
+            <ul>
+                <li>✅ Datos en tiempo real vía GBFS</li>
+                <li>✅ Geolocalización y búsqueda cercana</li>
+                <li>✅ Estadísticas detalladas</li>
+                <li>✅ Filtros avanzados</li>
+                <li>✅ Modo oscuro/claro</li>
+                <li>✅ Diseño responsive mobile-first</li>
+            </ul>
+            <h3>Versión 2.0</h3>
+            <p>Nuevo backend con API REST, almacenamiento histórico y arquitectura escalable.</p>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/modules/api.js"></script>
+    <script src="js/modules/ui.js"></script>
+    <script src="js/modules/map.js"></script>
+    <script src="js/modules/stations.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

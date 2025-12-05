@@ -1,0 +1,21 @@
+# FastAPI and ASGI server
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+
+# Database
+sqlalchemy[asyncio]>=2.0.25
+asyncpg>=0.29.0
+alembic>=1.13.0
+
+# Validation and settings
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# HTTP client
+httpx>=0.26.0
+
+# Development
+python-dotenv>=1.0.0
+
+# Optional: for production
+gunicorn>=21.0.0
