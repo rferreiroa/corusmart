@@ -7,18 +7,30 @@
 
 const CONFIG = {
     // API Configuration
-    // Change this to your backend URL in production
-    apiBaseUrl: window.location.hostname === 'localhost'
-        ? 'http://localhost:8000/api/v1'
-        : '/api/v1',
+    // Automatically detects environment and sets appropriate URL
+    apiBaseUrl: (() => {
+        if (window.location.hostname === 'localhost') {
+            return 'http://localhost:8000/api/v1';
+        } else if (window.location.hostname.includes('roi-automation.es')) {
+            return 'https://roi-automation.es/api/v1';
+        }
+        return window.location.origin + '/api/v1';
+    })(),
 
-    // Legacy n8n endpoints (for backwards compatibility)
-    n8nUrl: 'http://localhost:5678',
-    legacyApiUrl: 'http://localhost:5678/webhook/bicicoruna',
-    legacyParkingsUrl: 'http://localhost:5678/webhook/parkings',
+    // Legacy n8n endpoints (for backwards compatibility with existing deployment)
+    n8nUrl: window.location.hostname === 'localhost'
+        ? 'http://localhost:5678'
+        : 'https://n8n.roi-automation.es',
+    legacyApiUrl: window.location.hostname === 'localhost'
+        ? 'http://localhost:5678/webhook/bicicoruna'
+        : 'https://n8n.roi-automation.es/webhook/bicicoruna',
+    legacyParkingsUrl: window.location.hostname === 'localhost'
+        ? 'http://localhost:5678/webhook/parkings'
+        : 'https://n8n.roi-automation.es/webhook/parkings',
 
     // Feature flags
-    useBackendAPI: true,  // Set to false to use legacy n8n endpoints
+    // Set to true when backend is deployed and ready
+    useBackendAPI: false,  // Start with legacy n8n for compatibility
 
     // Default system
     defaultSystem: 'bicicoruna',

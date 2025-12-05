@@ -197,7 +197,8 @@ const StationsManager = {
      */
     showDetails(stationId) {
         const station = this.stations.find(s =>
-            s.station_id === stationId || s.id === stationId
+            s.station_id === stationId || s.id === stationId ||
+            String(s.station_id) === String(stationId)
         );
 
         if (!station) {
@@ -205,10 +206,8 @@ const StationsManager = {
             return;
         }
 
-        // For now, just center on the station
-        // In the future, this could show a detail modal with history
-        MapManager.centerOn(station.lat, station.lon, 17);
-        UIManager.showNotification(`Mostrando: ${station.name}`, 'info');
+        // Show the station detail modal with all info
+        UIManager.showStationDetail(station);
     },
 
     /**

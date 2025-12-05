@@ -89,12 +89,21 @@ const APIClient = {
      * Legacy: Fetch stations from n8n webhook (for backwards compatibility)
      */
     async getLegacyStations() {
+        console.log('📡 Fetching from legacy n8n endpoint:', CONFIG.legacyApiUrl);
         try {
-            const response = await fetch(CONFIG.legacyApiUrl);
-            if (!response.ok) throw new Error('Legacy API error');
-            return await response.json();
+            const response = await fetch(CONFIG.legacyApiUrl, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                }
+            });
+            if (!response.ok) throw new Error(`Legacy API error: ${response.status}`);
+            const data = await response.json();
+            console.log('✅ Legacy API response received');
+            return data;
         } catch (error) {
-            console.error('Legacy API Error:', error);
+            console.error('❌ Legacy API Error:', error);
             throw error;
         }
     },
@@ -103,12 +112,21 @@ const APIClient = {
      * Legacy: Fetch parkings from n8n webhook
      */
     async getLegacyParkings() {
+        console.log('📡 Fetching parkings from legacy endpoint:', CONFIG.legacyParkingsUrl);
         try {
-            const response = await fetch(CONFIG.legacyParkingsUrl);
-            if (!response.ok) throw new Error('Legacy parkings API error');
-            return await response.json();
+            const response = await fetch(CONFIG.legacyParkingsUrl, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                }
+            });
+            if (!response.ok) throw new Error(`Legacy parkings API error: ${response.status}`);
+            const data = await response.json();
+            console.log('✅ Legacy parkings response received');
+            return data;
         } catch (error) {
-            console.error('Legacy Parkings API Error:', error);
+            console.error('❌ Legacy Parkings API Error:', error);
             throw error;
         }
     },
@@ -117,12 +135,15 @@ const APIClient = {
      * Unified method to get stations (tries backend first, falls back to legacy)
      */
     async fetchStations() {
+        // Try new backend API first if enabled
         if (CONFIG.useBackendAPI) {
             try {
+                console.log('📡 Trying new backend API...');
                 const data = await this.getStations();
                 // Transform backend format to legacy format for compatibility
                 return data.stations.map(s => ({
                     station_id: s.external_id,
+                    id: s.id,  // Internal ID for detail views
                     name: s.name,
                     address: s.address,
                     lat: s.lat,
@@ -138,13 +159,44 @@ const APIClient = {
                     availability_status: s.current_status?.availability_status || 'unknown'
                 }));
             } catch (error) {
-                console.warn('Backend API failed, trying legacy...', error);
+                console.warn('⚠️ Backend API failed, falling back to legacy...', error.message);
             }
         }
 
-        // Fallback to legacy
-        const data = await this.getLegacyStations();
-        return data.stations || data;
+        // Fallback to legacy n8n webhook
+        try {
+            const data = await this.getLegacyStations();
+            // Handle different response formats
+            if (data.success && data.stations) {
+                return data.stations;
+            } else if (Array.isArray(data)) {
+                return data;
+            } else if (data.stations) {
+                return data.stations;
+            }
+            throw new Error('Unexpected response format');
+        } catch (error) {
+            console.error('❌ All API attempts failed:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Unified method to get parkings
+     */
+    async fetchParkings() {
+        try {
+            const data = await this.getLegacyParkings();
+            if (data.success && data.parkings) {
+                return data.parkings;
+            } else if (Array.isArray(data)) {
+                return data;
+            }
+            return [];
+        } catch (error) {
+            console.warn('⚠️ Could not fetch parkings:', error.message);
+            return [];
+        }
     },
 
     /**
